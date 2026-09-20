@@ -24,11 +24,12 @@ Luego visita `http://localhost:3000`.
 
 ## Controles
 
-| Tecla     | Acción     |
-| --------- | ---------- |
-| `←` `→`   | Rotar nave |
-| `↑`       | Propulsar  |
-| `Espacio` | Disparar   |
+| Tecla     | Acción         |
+| --------- | -------------- |
+| `←` `→`   | Rotar nave     |
+| `↑`       | Propulsar      |
+| `Espacio` | Disparar       |
+| `Tab`     | Cambiar skin   |
 
 ## Puntuación
 
@@ -44,3 +45,17 @@ Luego visita `http://localhost:3000`.
 - Asteroides se parten en fragmentos más pequeños al ser destruidos
 - Partículas de explosión al destruir asteroides
 - Power-up de velocidad: al recogerlo (icono rombo cian), la nave se mueve el doble de rápido durante 5 segundos
+- Power-up de escudo: protege la nave de colisiones durante 6 segundos
+- Power-up de triple disparo: dispara tres proyectiles durante 5 segundos
+- Sistema de skins: cambia el aspecto de la nave con `Tab` y conserva la selección al recargar
+
+## Skins
+
+| Skin      | Contorno |
+| --------- | -------- |
+| Clásico   | Blanco   |
+| Neón      | Cian     |
+| Rubí      | Rojo     |
+| Ámbar     | Ámbar    |
+| Fantasma  | Verde    |
+| Violeta   | Magenta  |
