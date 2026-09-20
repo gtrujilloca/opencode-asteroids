@@ -130,6 +130,7 @@ class Ship {
     this.vy     = 0;
     this.radius = 12;
     this.thrusting     = false;
+    this.speedTimer    = 0;
     this.invincible    = 3;
     this.shootCooldown = 0;
     this.dead          = false;
@@ -139,18 +140,21 @@ class Ship {
     if (this.dead) return;
     if (this.invincible    > 0) this.invincible    -= dt;
     if (this.shootCooldown > 0) this.shootCooldown -= dt;
+    if (this.speedTimer    > 0) this.speedTimer    -= dt;
 
-    const ROT   = 3.5;   // rad/s
-    const THRUST = 260;  // px/s²
-    const DRAG   = 0.987;
+    const ROT     = 3.5;   // rad/s
+    const THRUST  = 260;   // px/s²
+    const SPEEDX2 = 2;     // multiplicador con power-up activo
+    const DRAG    = 0.987;
 
     if (keys['ArrowLeft'])  this.angle -= ROT * dt;
     if (keys['ArrowRight']) this.angle += ROT * dt;
 
     this.thrusting = !!keys['ArrowUp'];
     if (this.thrusting) {
-      this.vx += Math.cos(this.angle) * THRUST * dt;
-      this.vy += Math.sin(this.angle) * THRUST * dt;
+      const thrust = THRUST * (this.speedTimer > 0 ? SPEEDX2 : 1);
+      this.vx += Math.cos(this.angle) * thrust * dt;
+      this.vy += Math.sin(this.angle) * thrust * dt;
     }
 
     this.vx *= DRAG;
@@ -189,15 +193,87 @@ class Ship {
     ctx.closePath();
     ctx.stroke();
 
+    // Resplandor cian mientras el power-up de velocidad está activo
+    if (this.speedTimer > 0) {
+      ctx.shadowColor = '#0ff';
+      ctx.shadowBlur  = 12;
+      ctx.stroke();
+    }
+
     // Llama del propulsor
     if (this.thrusting && Math.random() > 0.35) {
       ctx.beginPath();
       ctx.moveTo(-8, -4);
       ctx.lineTo(-8 - rand(6, 14), 0);
       ctx.lineTo(-8,  4);
-      ctx.strokeStyle = 'rgba(255, 130, 0, 0.85)';
+      ctx.strokeStyle = this.speedTimer > 0
+        ? 'rgba(0, 255, 255, 0.85)'
+        : 'rgba(255, 130, 0, 0.85)';
       ctx.stroke();
     }
+
+    ctx.restore();
+  }
+}
+
+// ── Power-up: Velocidad ─────────────────────────────────────────────────────────
+const SPEED_DURATION = 5;   // segundos de efecto
+const SPEED_RADIUS   = 14;
+
+class SpeedPowerUp {
+  constructor(x, y) {
+    this.x      = x;
+    this.y      = y;
+    this.radius = SPEED_RADIUS;
+    this.ttl    = 12;       // segundos antes de expirar
+    this.t      = rand(0, Math.PI * 2);
+    this.dead   = false;
+  }
+
+  update(dt) {
+    this.t += dt;
+    this.ttl -= dt;
+    if (this.ttl <= 0) this.dead = true;
+  }
+
+  draw() {
+    // Parpadeo antes de expirar
+    if (this.ttl < 2 && Math.floor(this.ttl * 6) % 2 === 0) return;
+
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.t);
+    const s = 1 + 0.1 * Math.sin(this.t * 5);
+    ctx.scale(s, s);
+
+    ctx.strokeStyle = '#0ff';
+    ctx.lineWidth   = 2;
+    ctx.lineJoin    = 'round';
+    ctx.shadowColor = '#0ff';
+    ctx.shadowBlur  = 10;
+
+    // Rombo punteado
+    ctx.beginPath();
+    ctx.moveTo( this.radius, 0);
+    ctx.lineTo( this.radius * 0.35,  this.radius * 0.35);
+    ctx.lineTo( 0,  this.radius);
+    ctx.lineTo(-this.radius * 0.35,  this.radius * 0.35);
+    ctx.lineTo(-this.radius, 0);
+    ctx.lineTo(-this.radius * 0.35, -this.radius * 0.35);
+    ctx.lineTo( 0, -this.radius);
+    ctx.lineTo( this.radius * 0.35, -this.radius * 0.35);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Doble chevrón ">>"
+    ctx.beginPath();
+    ctx.moveTo(-5, -6);
+    ctx.lineTo( 2,  0);
+    ctx.lineTo(-5,  6);
+    ctx.moveTo( 1, -6);
+    ctx.lineTo( 8,  0);
+    ctx.lineTo( 1,  6);
+    ctx.stroke();
 
     ctx.restore();
   }
@@ -236,10 +312,11 @@ class Particle {
 }
 
 // ── Estado del juego ──────────────────────────────────────────────────────────
-let ship, bullets, asteroids, particles;
+let ship, bullets, asteroids, particles, powerUps;
 let score, lives, level;
 let state;      // 'playing' | 'dead' | 'gameover'
 let deadTimer;
+let powerUpSpawnTimer;
 
 function spawnAsteroids(count) {
   const SAFE_DIST = 130;
@@ -258,18 +335,31 @@ function initGame() {
   bullets   = [];
   asteroids = [];
   particles = [];
+  powerUps  = [];
   score  = 0;
   lives  = 3;
   level  = 1;
   state  = 'playing';
+  powerUpSpawnTimer = rand(4, 7);
   spawnAsteroids(4);
+}
+
+function spawnSpeedPowerUp() {
+  let x, y;
+  do {
+    x = rand(0, W);
+    y = rand(0, H);
+  } while (Math.hypot(x - ship.x, y - ship.y) < 160);
+  powerUps.push(new SpeedPowerUp(x, y));
 }
 
 function nextLevel() {
   level++;
   bullets   = [];
   particles = [];
+  powerUps  = [];
   ship.reset();
+  powerUpSpawnTimer = rand(4, 7);
   spawnAsteroids(3 + level);
 }
 
@@ -315,10 +405,21 @@ function update(dt) {
   ship.update(dt);
   bullets.forEach(b => b.update(dt));
   asteroids.forEach(a => a.update(dt));
+  powerUps.forEach(p => p.update(dt));
   particles.forEach(p => p.update(dt));
 
   bullets   = bullets.filter(b => !b.dead);
+  powerUps  = powerUps.filter(p => !p.dead);
   particles = particles.filter(p => !p.dead);
+
+  // Spawn del power-up de velocidad
+  if (powerUpSpawnTimer > 0 && powerUps.length === 0) {
+    powerUpSpawnTimer -= dt;
+    if (powerUpSpawnTimer <= 0) {
+      spawnSpeedPowerUp();
+      powerUpSpawnTimer = rand(6, 11);
+    }
+  }
 
   // Bala vs asteroide
   const newAsteroids = [];
@@ -343,6 +444,15 @@ function update(dt) {
         killShip();
         break;
       }
+    }
+  }
+
+  // Nave vs power-up
+  for (const p of powerUps) {
+    if (!p.dead && dist(ship, p) < ship.radius + p.radius) {
+      p.dead = true;
+      ship.speedTimer = SPEED_DURATION;
+      explode(p.x, p.y, 10);
     }
   }
 
@@ -375,6 +485,12 @@ function drawHUD() {
   ctx.textAlign = 'left';
   ctx.fillText(`SCORE  ${score}`, 14, 26);
 
+  if (ship.speedTimer > 0) {
+    ctx.fillStyle = '#0ff';
+    ctx.font = '13px monospace';
+    ctx.fillText(`VELOCIDAD x2  ${ship.speedTimer.toFixed(1)}s`, 14, 46);
+  }
+
   ctx.textAlign = 'center';
   ctx.fillText(`NIVEL ${level}`, W / 2, 26);
 
@@ -399,6 +515,7 @@ function draw() {
 
   particles.forEach(p => p.draw());
   asteroids.forEach(a => a.draw());
+  powerUps.forEach(p => p.draw());
   bullets.forEach(b => b.draw());
   ship.draw();
 
